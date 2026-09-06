@@ -1,4 +1,4 @@
-name: Build and push to Cachix
+name: Nix Build Cachix Update
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   update:
