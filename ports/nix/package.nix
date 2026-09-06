@@ -2,14 +2,15 @@
 , buildNpmPackage
 , python3
 , makeWrapper
-, src ? ./..
+, sanoid
 }:
 
 let
   pname = "webzfs";
   # Derive the package version from upstream pyproject.toml so it remains
   # the single source of truth for the WebZFS version.
-  version = (lib.importTOML ../pyproject.toml).tool.poetry.version;
+  version = (lib.importTOML ../../pyproject.toml).tool.poetry.version;
+  src = ./../..;
 
   # Python dependencies derived from upstream requirements.txt.
   # Version pins are intentionally relaxed: nixpkgs resolves its own
@@ -77,6 +78,17 @@ buildNpmPackage {
 
   nativeBuildInputs = [ makeWrapper ];
   buildInputs = [ pythonEnv ];
+
+  # Add the nix store path for sanoid and syncoid to the paths list
+  postPatch = ''
+    file=$(find . -path "*/services/sanoid.py" -type f)
+    if [ -n "$file" ]; then
+      substituteInPlace "$file" \
+        --replace-fail "COMMON_PATHS = [" "COMMON_PATHS = [
+          '${sanoid}/bin/sanoid',
+          '${sanoid}/bin/syncoid',"
+    fi
+  '';
 
   buildPhase = ''
     runHook preBuild
