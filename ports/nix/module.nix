@@ -97,6 +97,7 @@ in
         SETTINGS_MODULE = "config.settings.base";
         SECRET_KEY = cfg.settings.SECRET_KEY or "changeme-in-production";
         WEBZFS_STATE_DIR = "/var/lib/webzfs";
+        WEBZFS_SYSTEMD_UNIT_DIR = "/run/systemd/system";
       }
       // cfg.settings;
 
@@ -149,8 +150,12 @@ in
                 (lib.getExe' pkgs.sanoid "sanoid")
                 (lib.getExe' pkgs.sanoid "syncoid")
 
-                # Service management (systemctl for system services page)
-                (lib.getExe' pkgs.systemd "systemctl")
+                # Service management (systemctl for system services page).
+                # The webzfs package bundles systemdMinimal into its runtime
+                # PATH ("journalctl, systemctl") and every invocation uses the
+                # bare name, so the command always resolves to the minimal
+                # build on NixOS (the full pkgs.systemd path is never used).
+                (lib.getExe' pkgs.systemdMinimal "systemctl")
 
                 # Crontab editing
                 (lib.getExe' pkgs.cron "crontab")
@@ -171,6 +176,13 @@ in
                 "${lib.getExe' pkgs.coreutils "tee"} /etc/systemd/system/webzfs-task-*"
                 "${lib.getExe' pkgs.coreutils "rm"} -f /etc/systemd/system/webzfs-task-*"
 
+                # Default unit directory hashing override: NixOS's /etc is read-only,
+                # so the module points WEBZFS_SYSTEMD_UNIT_DIR at /run/systemd/system.
+                # The transient dir is root-writable and cleared each boot, so task
+                # removal must be allowed there too.
+                "${lib.getExe' pkgs.coreutils "tee"} /run/systemd/system/webzfs-task-*"
+                "${lib.getExe' pkgs.coreutils "rm"} -f /run/systemd/system/webzfs-task-*"
+
                 # File editing (for config files like smartd.conf, sanoid.conf)
                 (lib.getExe' pkgs.coreutils "cat")
                 (lib.getExe' pkgs.coreutils "tee")
@@ -178,9 +190,12 @@ in
 
                 # Read system journal and plain-text syslog files for the
                 # Observability -> System Log page. journalctl needs sudo (or
-                # systemd-journal group) on most distros. tail covers Debian/Ubuntu
-                # (/var/log/syslog) and old RHEL (/var/log/messages).
-                (lib.getExe' pkgs.systemd "journalctl")
+                # systemd-journal group) on most distros. As with systemctl
+                # above, only the systemdMinimal path is needed: the package
+                # bundles it in PATH and calls it by bare name. tail covers
+                # Debian/Ubuntu (/var/log/syslog) and old RHEL
+                # (/var/log/messages).
+                (lib.getExe' pkgs.systemdMinimal "journalctl")
                 (lib.getExe' pkgs.coreutils "tail")
 
                 # Support bundle log collection. Reading /var/log/messages and

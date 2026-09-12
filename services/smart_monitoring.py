@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from services.utils import is_freebsd, is_netbsd, run_privileged_command
+from services.file import save_file
 
 # Sentinel stored in the disk field of a scheduled test to mean "every
 # disk present at run time". A sentinel is used rather than expanding the
@@ -469,10 +470,10 @@ class SMARTMonitoringService:
     def update_smartd_config(self, config: str) -> None:
         """Update smartd.conf configuration"""
         try:
-            config_path = Path('/etc/smartd.conf')
-            # Would need root privileges
-            with open(config_path, 'w') as f:
-                f.write(config)
+            # /etc/smartd.conf is root-owned; write it through the same
+            # sudo tee path used for sanoid.conf so it works regardless
+            # of whether the webzfs user can write the file directly.
+            save_file('/etc/smartd.conf', config, use_sudo=True)
         except Exception as e:
             raise Exception(f"Failed to update smartd.conf: {str(e)}")
     
