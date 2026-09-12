@@ -310,11 +310,5 @@ static/js/*
 # Related repos
 related-repos/
 
-# opencode / oh-my-openagent
-.opencode
-.omo
-
 # Nix build results fodler
 result
-
-

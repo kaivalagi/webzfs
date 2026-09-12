@@ -1,27 +1,22 @@
 # Nix packaging for WebZFS
 
-This directory contains the Nix packaging for [WebZFS](https://github.com/webzfs/webzfs), a
-web-based ZFS management interface. The packaging lives in-repo and is exposed through the
-flake at the repository root, so you can consume this project directly as a flake input.
+This directory contains the Nix packaging which is exposed through the flake at the repository root, so you can consume this project directly as a flake input.
 
 ## What's here
 
 | File              | Purpose                                                             |
 | ----------------- | ------------------------------------------------------------------- |
-| `package.nix`     | The WebZFS package (`buildNpmPackage` + Python runtime from `requirements.txt`) |
+| `package.nix`     | The WebZFS package                                                  |
 | `module.nix`      | A NixOS module that runs WebZFS as a systemd service                |
 | `dev-shell.nix`   | A development shell with Python, Node.js, npm, and gunicorn         |
 
 The flake at the repository root exposes:
 
-- `nixosModules.webzfs`
-- `overlays.default`
+- `nixosModules.webzfs` / `nixosModules.webzfs`
 - `packages.<system>.webzfs` / `packages.<system>.default`
 - `devShells.<system>.default`
 
 Supported systems: `x86_64-linux` and `aarch64-linux`.
-
----
 
 ## Using WebZFS as a NixOS module
 
@@ -30,8 +25,10 @@ Add the flake as an input and import the module:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    webzfs.url = "github:kaivalagi/webzfs";
+    webzfs = {
+      url = "github:webzfs/webzfs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = { self, nixpkgs, webzfs, ... }: {
@@ -42,7 +39,7 @@ Add the flake as an input and import the module:
         {
           services.webzfs = {
             enable = true;
-            # openFirewall = true;               # if you want to expose the port
+            # openFirewall = true;
             settings = {
               SECRET_KEY = "change-me-in-production";
               # HOST, PORT, and other env are also accepted here
@@ -55,35 +52,13 @@ Add the flake as an input and import the module:
 }
 ```
 
-Enable and start the service with:
-
-```bash
-sudo systemctl enable --now webzfs
-```
-
-The module creates a dedicated `webzfs` user/group and runs the service under
-`systemd` with state kept in `/var/lib/webzfs`.
+The module creates a dedicated `webzfs` user/group and runs the service under `systemd` with state kept in `/var/lib/webzfs`.
 
 ### What the module sets up for you
 
-The module is self-contained: enabling `services.webzfs.enable` is all you
-need, there are no further dependencies to configure. Under the hood it wires
-up the full host integration required for WebZFS to actually work on NixOS:
+The module is self-contained: enabling `services.webzfs.enable` is all you need, there are no further dependencies to configure. Under the hood it wires up the full host integration required for WebZFS to actually work on NixOS, including a `webzfs` user with the required permissions.
 
-- **Privileged command access** — `sudo` NOPASSWD rules for the commands that
-  genuinely need root (`zpool`, `zfs`, `zdb -l *`, `smartctl`, `lsof`/
-  `lslocks`, `sanoid`/`syncoid`, `systemctl`, `crontab`, `tee`/`rm` for
-  WebZFS-owned systemd unit files, file editing via `cat`/`tee`/`mkdir`, and
-  `dmesg` for support bundles). `secure_path` is pinned to
-  `/run/current-system/sw/bin` so the rules resolve across rebuilds.
-- **Group memberships instead of sudo for read-only tools** — the `webzfs`
-  user joins `shadow` (PAM login against `/etc/shadow`), `systemd-journal`
-  (`journalctl` log readout), and `disk` (`blkid` block device reads); `lsblk`
-  needs no privilege at all.
-- **PATH** — the service gets a PATH with `/run/wrappers`, `zfs`,
-  `smartmontools`, `sanoid`/`syncoid`, `util-linux`, `lsof`, `systemd`,
-  `coreutils`, `gnugrep`, and `cronie`, so both direct tool execution and
-  sudo's secure_path resolve correctly.
+The module has full support for Sanoid and Syncoid, however if their configuration is set declaratively in NixOS with `services.sanoid.enable` and `services.syncoid.enable`, then the configuration will be read only in WebZFS.
 
 ### Module options
 
@@ -98,72 +73,12 @@ up the full host integration required for WebZFS to actually work on NixOS:
 | `user`            | string      | `webzfs`        | System user the service runs as.               |
 | `group`           | string      | `webzfs`        | Group for the service user.                    |
 
-> **Note:** WebZFS binds to `127.0.0.1` by default. For remote access, prefer SSH port
-> forwarding (`ssh -L 127.0.0.1:26619:127.0.0.1:26619 host`) over exposing it directly.
+> **Note:** WebZFS binds to `127.0.0.1` by default. For remote access, prefer SSH port forwarding (`ssh -L 127.0.0.1:26619:127.0.0.1:26619 host`) over exposing it directly.
 
----
-
-## Using the overlay
-
-If you are not using the NixOS module and just want `pkgs.webzfs` available in your package
-set:
-
-```nix
-{
-  inputs.webzfs.url = "github:kaivalagi/webzfs";
-
-  outputs = { nixpkgs, webzfs, ... }: {
-    overlays.default = nixpkgs.lib.composeManyExtensions [
-      webzfs.overlays.default
-      (final: prev: { /* your other overrides */ })
-    ];
-  };
-}
-```
-
-You can then refer to `pkgs.webzfs`.
-
----
-
-## Installing the package directly
-
-To install WebZFS into your user (or system) profile without a module:
-
-```bash
-nix profile install github:kaivalagi/webzfs
-```
-
-Or add it to your NixOS config:
-
-```nix
-environment.systemPackages = [ pkgs.webzfs ];
-```
-
----
-
-## Using the binary cache (Cachix)
-
-To avoid building WebZFS and its dependencies locally, you can pull pre-built binaries from
-the Cachix cache. Add the substituter (as your user or system-wide):
-
-```bash
-# one-off per user
-nix run nixpkgs#cachix -- use kaivalagi
-
-# or manually
-cachix use kaivalagi
-```
-
-This adds `https://kaivalagi.cachix.org` to your `nix.conf` substituters and imports its
-public key. The GitHub Actions workflow builds on pushes to `main` and `v*` tags and pushes
-to this cache, so releases are usually already available.
-
----
 
 ## Development shell
 
-Drop into a shell with the full toolchain (Python runtime + dev tools, Node.js, npm,
-gunicorn):
+Drop into a shell with the full toolchain for WebZFS development (Python runtime + dev tools, Node.js, npm, gunicorn):
 
 ```bash
 nix develop
@@ -180,7 +95,6 @@ Inside the shell:
 `PYTHONPATH` is set to the repository root and `SETTINGS_MODULE=config.settings.dev`, so the
 app runs without a virtualenv.
 
----
 
 ## Building
 
@@ -194,20 +108,3 @@ nix flake check
 # Show all configureable outputs
 nix flake show
 ```
-
----
-
-## Development notes
-
-- Python dependencies are derived from `requirements.txt` (the single source of truth) and
-  mapped to nixpkgs attribute names with version pins relaxed, since nixpkgs carries its own
-  versions.
-- The package version is derived from `pyproject.toml` (`tool.poetry.version`), so it is the
-  single source of truth for the version. To release a new version, bump it in `pyproject.toml`;
-  the Nix package picks it up automatically.
-- `ecdsa` is intentionally omitted from the dependency list: `python-jose` falls back to the
-  `cryptography` backend, and `ecdsa` is flagged insecure in nixpkgs.
-- The package installs to `$out/opt/webzfs/` and provides a `$out/bin/webzfs` wrapper that
-  launches `gunicorn` with `PYTHONPATH` set to the source directory.
-- Node.js dependencies are pinned via `package-lock.json` in the repository root and prefetched
-  during the build.

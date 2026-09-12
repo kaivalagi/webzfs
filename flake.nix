@@ -8,23 +8,26 @@
   outputs =
     { self, nixpkgs }:
     let
-      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = system: nixpkgs.legacyPackages.${system};
     in
     {
-
-      # package required to allow for cachix upload
-      packages.x86_64-linux = rec {
-        webzfs = pkgs.callPackage ./ports/nix/package.nix { };
+      packages = forAllSystems (system: rec {
+        webzfs = (pkgsFor system).callPackage ./ports/nix/package.nix { };
         default = webzfs;
-      };
+      });
+
+      devShells = forAllSystems (system: {
+        default = import ./ports/nix/dev-shell.nix { pkgs = pkgsFor system; };
+      });
 
       nixosModules = rec {
         webzfs = import ./ports/nix/module.nix;
-        default = { ... }: {
-          imports = [ webzfs ];
-        };
+        default = webzfs;
       };
-
-      devShells.x86_64-linux.default = import ./ports/nix/dev-shell.nix { inherit pkgs; };
     };
 }

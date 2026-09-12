@@ -1,4 +1,5 @@
-{ pkgs ? import <nixpkgs> { }
+{
+  pkgs ? import <nixpkgs> { },
 }:
 
 let
@@ -10,56 +11,58 @@ let
   #
   # ecdsa is intentionally omitted: python-jose falls back to the
   # cryptography backend, and ecdsa is flagged insecure in nixpkgs.
-  pythonDeps = python3Packages: with python3Packages; [
-    annotated-doc
-    annotated-types
-    anyio
-    bcrypt
-    cffi
-    click
-    colorama
-    croniter
-    cryptography
-    fastapi
-    gunicorn
-    h11
-    humanize
-    idna
-    invoke
-    jinja2
-    markdown-it-py
-    markupsafe
-    mdurl
-    packaging
-    paramiko
-    psutil
-    pyasn1
-    pycparser
-    pydantic
-    pydantic-core
-    pydantic-settings
-    pygments
-    pynacl
-    python-dateutil
-    python-dotenv
-    python-jose
-    python-multipart
-    python-pam
-    rich
-    rsa
-    shellingham
-    six
-    starlette
-    typer
-    typing-extensions
-    typing-inspection
-    uvicorn
-  ];
+  pythonDeps =
+    python3Packages: with python3Packages; [
+      annotated-doc
+      annotated-types
+      anyio
+      bcrypt
+      cffi
+      click
+      colorama
+      croniter
+      cryptography
+      fastapi
+      gunicorn
+      h11
+      humanize
+      idna
+      invoke
+      jinja2
+      markdown-it-py
+      markupsafe
+      mdurl
+      packaging
+      paramiko
+      psutil
+      pyasn1
+      pycparser
+      pydantic
+      pydantic-core
+      pydantic-settings
+      pygments
+      pynacl
+      python-dateutil
+      python-dotenv
+      python-jose
+      python-multipart
+      python-pam
+      rich
+      rsa
+      shellingham
+      six
+      starlette
+      typer
+      typing-extensions
+      typing-inspection
+      uvicorn
+    ];
 
   # Development tools from [tool.poetry.group.dev.dependencies] in pyproject.toml.
   # Some packages are optional because they are not currently packaged in
   # nixpkgs; the shell remains usable without them.
-  devDeps = python3Packages:
+  devDeps =
+    python3Packages:
     (with python3Packages; [
       ruff
       black

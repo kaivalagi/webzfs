@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.webzfs;
@@ -62,8 +67,6 @@ in
 
     # Enable ZFS filesystem support
     boot.supportedFilesystems = [ "zfs" ];
-    # Enable Sanoid
-    services.sanoid.enable = true;
 
     users.users.${cfg.user} = {
       isSystemUser = true;
@@ -77,18 +80,12 @@ in
 
     users.groups.${cfg.group} = { };
 
-
     systemd.services.webzfs = {
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "zfs-mount.service" ];
-
-       path = with pkgs; [ 
-          "/run/wrappers" # Necessary for webzfs to run commands as sudo
-          "${config.system.path}" # Put system packages in service environment
-          lsof
-          smartmontools
-          #sanoid # Not necessary due to the package itself adding it to the store for the hardcoded path
-        ];
+      after = [
+        "network.target"
+        "zfs-mount.service"
+      ];
 
       environment = {
         HOME = "/var/lib/webzfs";
@@ -100,7 +97,8 @@ in
         SETTINGS_MODULE = "config.settings.base";
         SECRET_KEY = cfg.settings.SECRET_KEY or "changeme-in-production";
         WEBZFS_STATE_DIR = "/var/lib/webzfs";
-      } // cfg.settings;
+      }
+      // cfg.settings;
 
       serviceConfig = {
         Type = "simple";
@@ -124,56 +122,73 @@ in
       extraRules = [
         {
           users = [ cfg.user ];
-          commands = map (cmd: { command = cmd; options = [ "NOPASSWD" ]; }) [
-            # ZFS commands
-            "${config.system.path}/bin/zpool"
-            "${config.system.path}/bin/zfs"
-            "${config.system.path}/bin/zdb -l *"
-            # SMART monitoring
-            "${pkgs.smartmontools}/bin/smartctl"
-            # Disk utilities
-            "${config.system.path}/bin/lsblk"
-            "${config.system.path}/bin/blkid"
-            # Open file / lock inspection (pool export busy investigation)
-            "${pkgs.lsof}/bin/lsof"
-            "${config.system.path}/bin/lslocks"
-            # Sanoid/Syncoid
-            "${pkgs.sanoid}/bin/sanoid"
-            "${pkgs.sanoid}/bin/syncoid"
-            # Service management (systemctl for system services page)
-            "${config.system.path}/bin/systemctl"
-            # Crontab editing
-            #"${config.system.path}/bin/crontab"
-            # Scheduled syncoid job timers.
-            # Unit files are created and edited with "sudo tee" (covered by the
-            # general tee entry below) and enabled/disabled/reloaded with
-            # "sudo systemctl" (covered by the systemctl entry above). The explicit
-            # tee entries here document that intent and keep timer management
-            # working even if the general tee entry is ever narrowed. rm is
-            # restricted to WebZFS-owned unit files only.
-            "${config.system.path}/bin/tee /etc/systemd/system/webzfs-syncoid-job-*"
-            "${config.system.path}/bin/rm -f /etc/systemd/system/webzfs-syncoid-job-*"
-            # Unified Scheduling Hub timers. All scheduled task types (scrub, SMART
-            # self-test, health check, and replication) use the webzfs-task-* unit
-            # naming scheme managed by services/job_scheduler.py.
-            "${config.system.path}/bin/tee /etc/systemd/system/webzfs-task-*"
-            "${config.system.path}/bin/rm -f /etc/systemd/system/webzfs-task-*"
-            # File editing (for config files like smartd.conf, sanoid.conf)
-            "${config.system.path}/bin/cat"
-            "${config.system.path}/bin/tee"
-            "${config.system.path}/bin/mkdir"
-            # Read system journal and plain-text syslog files for the
-            # Observability -> System Log page. journalctl needs sudo (or
-            # systemd-journal group) on most distros. tail covers Debian/Ubuntu
-            # (/var/log/syslog) and old RHEL (/var/log/messages).
-            "${config.system.path}/bin/journalctl"
-            "${config.system.path}/bin/tail"
-            # Support bundle log collection. Reading /var/log/messages and
-            # /var/log/syslog (typically mode 640 root:adm) and the kernel ring
-            # buffer requires elevated privileges for the unprivileged webzfs user.
-            "${config.system.path}/bin/grep"
-            "${config.system.path}/bin/dmesg"      
-          ];
+          commands =
+            map
+              (cmd: {
+                command = cmd;
+                options = [ "NOPASSWD" ];
+              })
+              [
+                # ZFS commands
+                (lib.getExe' pkgs.zfs "zpool")
+                (lib.getExe pkgs.zfs)
+                "${lib.getExe' pkgs.zfs "zdb"} -l *"
+
+                # SMART monitoring
+                (lib.getExe pkgs.smartmontools)
+
+                # Disk utilities
+                (lib.getExe' pkgs.util-linux "lsblk")
+                (lib.getExe' pkgs.util-linux "blkid")
+
+                # Open file / lock inspection (pool export busy investigation)
+                (lib.getExe pkgs.lsof)
+                (lib.getExe' pkgs.util-linux "lslocks")
+
+                # Sanoid/Syncoid
+                (lib.getExe' pkgs.sanoid "sanoid")
+                (lib.getExe' pkgs.sanoid "syncoid")
+
+                # Service management (systemctl for system services page)
+                (lib.getExe' pkgs.systemd "systemctl")
+
+                # Crontab editing
+                (lib.getExe' pkgs.cron "crontab")
+
+                # Scheduled syncoid job timers.
+                # Unit files are created and edited with "sudo tee" (covered by the
+                # general tee entry below) and enabled/disabled/reloaded with
+                # "sudo systemctl" (covered by the systemctl entry above). The explicit
+                # tee entries here document that intent and keep timer management
+                # working even if the general tee entry is ever narrowed. rm is
+                # restricted to WebZFS-owned unit files only.
+                "${lib.getExe' pkgs.coreutils "tee"} /etc/systemd/system/webzfs-syncoid-job-*"
+                "${lib.getExe' pkgs.coreutils "rm"} -f /etc/systemd/system/webzfs-syncoid-job-*"
+
+                # Unified Scheduling Hub timers. All scheduled task types (scrub, SMART
+                # self-test, health check, and replication) use the webzfs-task-* unit
+                # naming scheme managed by services/job_scheduler.py.
+                "${lib.getExe' pkgs.coreutils "tee"} /etc/systemd/system/webzfs-task-*"
+                "${lib.getExe' pkgs.coreutils "rm"} -f /etc/systemd/system/webzfs-task-*"
+
+                # File editing (for config files like smartd.conf, sanoid.conf)
+                (lib.getExe' pkgs.coreutils "cat")
+                (lib.getExe' pkgs.coreutils "tee")
+                (lib.getExe' pkgs.coreutils "mkdir")
+
+                # Read system journal and plain-text syslog files for the
+                # Observability -> System Log page. journalctl needs sudo (or
+                # systemd-journal group) on most distros. tail covers Debian/Ubuntu
+                # (/var/log/syslog) and old RHEL (/var/log/messages).
+                (lib.getExe' pkgs.systemd "journalctl")
+                (lib.getExe' pkgs.coreutils "tail")
+
+                # Support bundle log collection. Reading /var/log/messages and
+                # /var/log/syslog (typically mode 640 root:adm) and the kernel ring
+                # buffer requires elevated privileges for the unprivileged webzfs user.
+                (lib.getExe pkgs.gnugrep)
+                (lib.getExe' pkgs.util-linux "dmesg")
+              ];
         }
       ];
     };
